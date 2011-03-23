@@ -77,6 +77,45 @@ describe PgSearch do
           end
         end
 
+        context 'through a polymorphic belongs_to association' do
+          with_model :alpha_associated do
+            table do |t|
+              t.string 'name'
+            end
+          end
+
+          with_model :bravo_associated do
+            table do |t|
+              t.string 'name'
+            end
+          end
+          with_model :model_that_belongs_to do
+            table do |t|
+              t.string 'name'
+              t.belongs_to 'owner'
+            end
+            model do
+              include PgSearch
+              belongs_to :owner, :polymorphic=>true
+              pg_search_scope :with_associated, :against=>:name, :associated_against=>{ :owner=>:name }
+            end
+          end
+
+          it 'returns rows that match the query in either its own columns or the columns of the associated model' do
+            alpha = alpha_associated.create!(:name=>'alpha dog')
+            bravo = bravo_associated.create!(:name=>'bravo on cable tv')
+            included = [
+                        model_that_belongs_to.create!(:name=>'owned by alfa', :owner=>alpha),
+                        model_that_belongs_to.create!(:name=>'property of bravo, not alpha', :owner=>bravo)
+                       ]
+            excluded = model_that_belongs_to.create!(:name=>'freeman notanumber')
+
+            results = model_that_belongs_to.with_associated('alpha')
+            results.sort_by(&:id).should == included.sort_by(&:id)
+            results.should_not include(excluded)
+          end
+        end
+
         context "through a has_many association" do
           with_model :associated_model_with_has_many do
             table do |t|
